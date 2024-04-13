@@ -1,4 +1,9 @@
 #include "systemcalls.h"
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/types.h>
+#include <fcntl.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -11,13 +16,17 @@ bool do_system(const char *cmd)
 {
 
 /*
- * TODO  add your code here
  *  Call the system() function with the command set in the cmd
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
+    if (cmd != NULL) {
+        int ret = system(cmd);
 
-    return true;
+        return ret == 0;
+    }
+
+    return false;
 }
 
 /**
@@ -45,12 +54,8 @@ bool do_exec(int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
 
 /*
- * TODO:
  *   Execute a system command by calling fork, execv(),
  *   and wait instead of system (see LSP page 161).
  *   Use the command[0] as the full path to the command to execute
@@ -58,10 +63,33 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    bool result = true;
+
+    if (count > 0) {
+        pid_t pid;
+        int w, wstatus;
+
+        fflush(stdout);
+
+        pid = fork();
+        switch (pid) {
+            case -1:
+                result = false;
+            case 0:
+                execv(command[0], command);
+                exit(EXIT_FAILURE);
+            default:                
+                wstatus = wait(&w);
+                if (wstatus == -1) {
+                    result = false;
+                } else {
+                    result = WIFEXITED(w) && WEXITSTATUS(w) == 0;
+                }
+        }
+    }
 
     va_end(args);
-
-    return true;
+    return result;
 }
 
 /**
@@ -80,9 +108,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
 
 
 /*
@@ -92,8 +117,41 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+    bool result = true;
+    int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+    if (fd < 0) {
+        result = false;
+    } else if (count > 0) {
+        pid_t pid;
+        int w, wstatus;
+
+        fflush(stdout);
+
+        pid = fork();
+        switch (pid) {
+            case -1:
+                close(fd);
+                result = false;
+            case 0:
+                if (dup2(fd, 1) < 0) {
+                    exit(EXIT_FAILURE);
+                } else {
+                    close(fd);
+                    execv(command[0], command);
+                    exit(EXIT_FAILURE);
+                }
+            default:
+                close(fd);                
+                wstatus = wait(&w);
+                if (wstatus == -1) {
+                    result = false;
+                } else {
+                    result = WIFEXITED(w) && WEXITSTATUS(w) == 0;
+                }
+        }        
+    }
 
     va_end(args);
 
-    return true;
+    return result;
 }
