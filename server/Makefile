@@ -1,11 +1,11 @@
 ifeq ($(CROSS_COMPILE),aarch64-none-linux-gnu-)
-	CC = $(CROSS_COMPILE)gcc
+	CC ?= $(CROSS_COMPILE)gcc
 endif
 
-CFLAGS = -g -Wall -Werror -pthread
-LDFLAGS = -lrt
+CFLAGS ?= -g -Wall -Werror
+LDFLAGS ?= -lpthread -lrt
 SRC := aesdsocket.c datafile.c
-TARGET = aesdsocket
+TARGET ?= aesdsocket
 OBJS := $(SRC:.c=.o)
 
 default_target: all
