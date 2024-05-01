@@ -2,8 +2,9 @@ ifeq ($(CROSS_COMPILE),aarch64-none-linux-gnu-)
 	CC = $(CROSS_COMPILE)gcc
 endif
 
-CFLAGS = -g -Wall -Werror
-SRC := aesdsocket.c
+CFLAGS = -g -Wall -Werror -pthread
+LDFLAGS = -lrt
+SRC := aesdsocket.c datafile.c
 TARGET = aesdsocket
 OBJS := $(SRC:.c=.o)
 
