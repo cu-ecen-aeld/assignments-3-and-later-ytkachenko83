@@ -16,6 +16,13 @@
 
 #include "aesd-circular-buffer.h"
 
+#define LENGTH(entries)\
+    sizeof(entries)/sizeof(entries[0])
+
+#define CB_POINTER_INC(pointer,entries)\
+    pointer = (pointer + 1)%(LENGTH(entries))
+#define CB_POINTER_CAST(pointer,entries)\
+    pointer%(LENGTH(entries))
 /**
  * @param buffer the buffer to search for corresponding offset.  Any necessary locking must be performed by caller.
  * @param char_offset the position to search for in the buffer list, describing the zero referenced
@@ -29,9 +36,17 @@
 struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct aesd_circular_buffer *buffer,
             size_t char_offset, size_t *entry_offset_byte_rtn )
 {
-    /**
-    * TODO: implement per description
-    */
+    for(int i = buffer->out_offs; i < buffer->in_offs+LENGTH(buffer->entry); i++) {
+        size_t ind = CB_POINTER_CAST(i, buffer->entry);
+        size_t block_len = buffer->entry[ind].size;
+        if (char_offset < block_len) {
+            *entry_offset_byte_rtn = char_offset;
+            return &(buffer->entry[ind]);
+        } else {
+            char_offset -= block_len;
+        }
+    }
+
     return NULL;
 }
 
@@ -44,9 +59,12 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 */
 void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
-    /**
-    * TODO: implement per description
-    */
+    if (buffer->full) {
+        CB_POINTER_INC(buffer->out_offs, buffer->entry);
+    }
+    buffer->entry[buffer->in_offs] = *add_entry;
+    CB_POINTER_INC(buffer->in_offs, buffer->entry);
+    buffer->full = buffer->in_offs == buffer->out_offs;
 }
 
 /**
