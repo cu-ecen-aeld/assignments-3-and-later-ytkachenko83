@@ -36,7 +36,12 @@
 struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct aesd_circular_buffer *buffer,
             size_t char_offset, size_t *entry_offset_byte_rtn )
 {
-    for(int i = buffer->out_offs; i < buffer->in_offs+LENGTH(buffer->entry); i++) {
+    uint8_t i = buffer->out_offs;
+    uint8_t upper_boundary = buffer->in_offs;
+    if (buffer->full) {
+        upper_boundary += LENGTH(buffer->entry);
+    }
+    for(; i < upper_boundary; i++) {
         size_t ind = CB_POINTER_CAST(i, buffer->entry);
         size_t block_len = buffer->entry[ind].size;
         if (char_offset < block_len) {
@@ -57,14 +62,18 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 * Any necessary locking must be handled by the caller
 * Any memory referenced in @param add_entry must be allocated by and/or must have a lifetime managed by the caller.
 */
-void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
+char * aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
+    char *old_buf = NULL;
     if (buffer->full) {
+        old_buf = buffer->entry[buffer->in_offs].buffptr;
         CB_POINTER_INC(buffer->out_offs, buffer->entry);
     }
     buffer->entry[buffer->in_offs] = *add_entry;
     CB_POINTER_INC(buffer->in_offs, buffer->entry);
     buffer->full = buffer->in_offs == buffer->out_offs;
+
+    return old_buf;
 }
 
 /**
