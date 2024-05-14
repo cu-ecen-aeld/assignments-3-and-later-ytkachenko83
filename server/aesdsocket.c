@@ -19,17 +19,16 @@
 #define ISO_2822_TIME_FMT "%a, %d %b %Y %T %z"
 
 int server_fd;
-int data_fd;
 timer_t timer_id;
 pthread_mutex_t mutex;
 volatile sig_atomic_t stopApp;
 
 void cleanup() {
-    close_datafile(data_fd);
     if (server_fd > 0) {
         close(server_fd);
     }
 
+    destroy_datafile();
     closelog();
 }
 
@@ -57,7 +56,7 @@ static void signal_handler(int signum) {
         cleanup_term_conn(1);
         pthread_mutex_destroy(&mutex);
 
-        close_datafile(data_fd);
+        destroy_datafile();
         closelog();
     }
 }
@@ -113,17 +112,17 @@ void* connnection_handler(void* param) {
     pthread_cleanup_push(connection_cleanup, args);
 
     syslog(LOG_DEBUG, "Accepted connection from %s", args->client_ip_addr);
-    int data_fd = args->data_fd;
 
-    if (adjust_datafile_pos(data_fd, 0, SEEK_END) > -1) { // position to EOF
+    size_t maxbuflen = args->init_buffer_size;
+    char recv_buf[BUFFER_SIZE];
+    int n;
+    size_t buflen = 0;
+    *args->buffer[0] = '\0';
 
-        size_t maxbuflen = args->init_buffer_size;
-        char recv_buf[BUFFER_SIZE];
-        int n;
-        size_t buflen = 0;
-        *args->buffer[0] = '\0';
-
-        while((n = recv(args->client_fd, recv_buf, sizeof(recv_buf), 0)) > 0) {
+    while((n = recv(args->client_fd, recv_buf, sizeof(recv_buf), 0)) > 0) {
+        int data_fd = open_datafile();
+        args->data_fd = data_fd;
+        if (adjust_datafile_pos(data_fd, 0, SEEK_END) > -1) {
             // locate position of newline
             int k = 0;
             int has_nl = 0;
@@ -165,6 +164,9 @@ void* connnection_handler(void* param) {
                     append_string(args->buffer, &maxbuflen, buflen, &recv_buf[k+1], buflen);
                 }
             }
+        } else {
+            syslog(LOG_ERR, "Failure to reposition cursor in the data file %d to the EOF", data_fd);
+            break;
         }
     }
 
@@ -178,6 +180,9 @@ void connection_cleanup(void* param) {
     
     close(args->client_fd);
     syslog(LOG_DEBUG, "Closed connection from %s", args->client_ip_addr);
+    if (args->data_fd) {
+        close_datafile(args->data_fd);
+    }
     free(*args->buffer);
     free(args->buffer);
     free(args->client_ip_addr);
@@ -203,7 +208,7 @@ void accept_conn() {
     conn_data->client_fd = client_fd;
     conn_data->client_ip_addr = malloc(strlen(client_ip_addr)+1);
     strcpy(conn_data->client_ip_addr, client_ip_addr);
-    conn_data->data_fd = data_fd;
+    conn_data->data_fd = 0;
     conn_data->init_buffer_size = BUFFER_SIZE;
     conn_data->buffer = malloc(sizeof(char *));
     *conn_data->buffer = malloc(BUFFER_SIZE);
@@ -336,10 +341,12 @@ static void timer_action(union sigval arg) {
             ts_row[len] = NEWLINE;
             ts_row[len+1] = '\0';
 
-            if (adjust_datafile_pos(data_fd, 0, SEEK_END) > -1) 
-                append_datafile(data_fd, ts_row, strlen(ts_row));
+            int fd = open_datafile();
+            if (adjust_datafile_pos(fd, 0, SEEK_END) > -1) 
+                append_datafile(fd, ts_row, strlen(ts_row));
             else
                 syslog(LOG_ERR, "Failure to adjust data file to position to the end!");
+            close_datafile(fd);
         }
         if (pthread_mutex_unlock(&mutex) != 0) {
             syslog(LOG_ERR, "Failed to unlock thread data: %s", strerror(errno));
@@ -387,11 +394,13 @@ int main(int argc, char **argv) {
 
     syslog(LOG_DEBUG, "Value of flag - %d", USE_AESD_CHAR_DEVICE);
     
-    // start data file
-    data_fd = open_datafile();
-    if (data_fd < 0) {
+    // open and close data file
+    int fd = open_datafile();
+    if (fd < 0) {
         exit(EXIT_FAILURE);
     }
+    close_datafile(fd);
+
     SLIST_INIT(&connections);
 
     pthread_mutexattr_t attr;

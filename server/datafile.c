@@ -22,9 +22,13 @@ void close_datafile(int fd) {
         int rc = close(fd);
         if (rc < 0) {
             syslog(LOG_ERR, "Failure to close file - %s: %s", DATA_FILE_PATH, strerror(errno));
-        } else if (!USE_AESD_CHAR_DEVICE) {
-            remove(DATA_FILE_PATH);
-        }
+        } 
+    }
+}
+
+void destroy_datafile() {
+    if (!USE_AESD_CHAR_DEVICE) {
+        remove(DATA_FILE_PATH);
     }
 }
 
