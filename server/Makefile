@@ -8,13 +8,16 @@ SRC := aesdsocket.c datafile.c
 TARGET ?= aesdsocket
 OBJS := $(SRC:.c=.o)
 
+EXTRA_CFLAGS = -DUSE_AESD_CHAR_DEVICE=$(if $(USE_AESD_CHAR_DEVICE),$(USE_AESD_CHAR_DEVICE),1)
+
 default_target: all
 
 # Targets
 all: $(TARGET)
 
+$(OBJS) : CFLAGS += $(EXTRA_CFLAGS)
 $(TARGET) : $(OBJS)	
-	$(CC) $(CFLAGS) $(INCLUDES) $(OBJS) -o $(TARGET) $(LDFLAGS)
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $(INCLUDES) $(OBJS) -o $(TARGET) $(LDFLAGS)
 
 clean:
-	-rm -f *.o $(TARGET)
+	$(RM) $(TARGET) $(OBJS)

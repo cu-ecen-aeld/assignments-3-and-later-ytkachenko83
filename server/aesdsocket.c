@@ -18,7 +18,6 @@
 #define NEWLINE '\n'
 #define ISO_2822_TIME_FMT "%a, %d %b %Y %T %z"
 
-
 int server_fd;
 int data_fd;
 timer_t timer_id;
@@ -93,7 +92,7 @@ void make_daemon() {
 }
 
 int send_response(int data_fd, int client_fd) {
-    char readbuf[BUFFER_SIZE];
+    char readbuf[1024*100];
     int m;
     // position to the beginning
     adjust_datafile_pos(data_fd, 0, SEEK_SET);
@@ -385,6 +384,8 @@ int main(int argc, char **argv) {
     if (register_sighandlers() != 0) {
         exit(EXIT_FAILURE);
     }
+
+    syslog(LOG_DEBUG, "Value of flag - %d", USE_AESD_CHAR_DEVICE);
     
     // start data file
     data_fd = open_datafile();
@@ -399,7 +400,9 @@ int main(int argc, char **argv) {
     pthread_mutex_init(&mutex, &attr);
     pthread_mutexattr_destroy(&attr);
 
-    create_timer();
+    if (!USE_AESD_CHAR_DEVICE) {
+        create_timer();
+    }
 
     for( ; stopApp < 1 ; ) {
         accept_conn();

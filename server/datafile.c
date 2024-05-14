@@ -22,21 +22,25 @@ void close_datafile(int fd) {
         int rc = close(fd);
         if (rc < 0) {
             syslog(LOG_ERR, "Failure to close file - %s: %s", DATA_FILE_PATH, strerror(errno));
-        } else {
+        } else if (!USE_AESD_CHAR_DEVICE) {
             remove(DATA_FILE_PATH);
         }
     }
 }
 
 int adjust_datafile_pos(int fd, int offset, int pos_kind) {
+#if USE_AESD_CHAR_DEVICE == 0
     // put cursor to the end of file
     int rc = lseek(fd, offset, pos_kind);
     if (rc == -1) {
         syslog(LOG_ERR, "Failure to reposition cursor file to the EOF: %s", strerror(errno));
     }
-
+#else
+    int rc = 0;
+#endif    
     return rc;
 }
+
 
 void append_datafile(int fd, char *buf, int size) {
     int rc = write(fd, buf, size);
