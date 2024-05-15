@@ -112,6 +112,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
                 loff_t *f_pos)
 {
     char *data;
+    const char* old_data;
     size_t data_ind, i;
     struct aesd_buffer_entry entry;
     struct aesd_dev *dev = filp->private_data;
@@ -126,7 +127,8 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
     if (copy_from_user(data, buf, count)) {
         retval = -EFAULT;
-        goto on_cleanup;
+        kfree(data);
+        goto on_exit;
     }
 
     if (!find_char(data, NEWLINE, &data_ind, count)) {
@@ -147,17 +149,13 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         dev->tmpbuf = NULL;
         dev->tmpbuf_size = 0;
         // push entry
-        data = aesd_circular_buffer_add_entry(&dev->circular_buffer, &entry);
-        if (data) {
-            goto on_cleanup;
+        old_data = aesd_circular_buffer_add_entry(&dev->circular_buffer, &entry);
+        if (old_data) {
+            kfree(old_data);
         }
     }
 
-    goto on_ok;
-
-    on_cleanup:
-        kfree(data);
-    on_ok:
+    on_exit:
         *f_pos = 0;
         write_unlock(&dev->lock);    
         return retval;
