@@ -9,6 +9,7 @@
 #define AESD_CHAR_DRIVER_AESDCHAR_H_
 
 #include "aesd-circular-buffer.h"
+#include <linux/sem.h>
 
 #define AESD_DEBUG 1  //Remove comment on this line to enable debug
 
@@ -33,7 +34,7 @@ struct aesd_dev
     struct aesd_circular_buffer circular_buffer;
     char *tmpbuf;
     size_t tmpbuf_size;
-    rwlock_t lock;
+    struct mutex lock;
     struct cdev cdev;     /* Char device structure      */
 };
 
