@@ -10,8 +10,10 @@
 
 #ifdef __KERNEL__
 #include <linux/string.h>
+#include <linux/errno.h>
 #else
 #include <string.h>
+#include <errno.h>
 #endif
 
 #include "aesd-circular-buffer.h"
@@ -23,6 +25,14 @@
     pointer = (pointer + 1)%(LENGTH(entries))
 #define CB_POINTER_CAST(pointer,entries)\
     pointer%(LENGTH(entries))
+#define CB_LOOP_UPPER_BOUNDARY(buffer,boundary_var)  \
+do {    \
+    boundary_var = buffer->in_offs; \
+    if (buffer->full) { \
+        boundary_var += LENGTH(buffer->entry);  \
+    }   \
+} while(0)
+  
 /**
  * @param buffer the buffer to search for corresponding offset.  Any necessary locking must be performed by caller.
  * @param char_offset the position to search for in the buffer list, describing the zero referenced
@@ -37,10 +47,9 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
             size_t char_offset, size_t *entry_offset_byte_rtn )
 {
     uint8_t i = buffer->out_offs;
-    uint8_t upper_boundary = buffer->in_offs;
-    if (buffer->full) {
-        upper_boundary += LENGTH(buffer->entry);
-    }
+    uint8_t upper_boundary;
+    CB_LOOP_UPPER_BOUNDARY(buffer, upper_boundary);
+
     for(; i < upper_boundary; i++) {
         size_t ind = CB_POINTER_CAST(i, buffer->entry);
         size_t block_len = buffer->entry[ind].size;
@@ -53,6 +62,28 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     }
 
     return NULL;
+}
+
+long long aesd_circular_buffer_jmp_entry_offset(struct aesd_circular_buffer *buffer, uint8_t entrynum, size_t offset) {
+    uint8_t i, ind, upper_boundary;
+    long long pos = 0;
+
+    if (entrynum < 0 || entrynum >= LENGTH(buffer->entry)) {
+        return -EINVAL;
+    }
+    ind = CB_POINTER_CAST((buffer->out_offs + entrynum), buffer->entry);
+    if (!buffer->entry[ind].buffptr || buffer->entry[ind].size == 0 || offset < 0 || offset >= buffer->entry[ind].size) {
+        return -EINVAL;
+    }
+
+    CB_LOOP_UPPER_BOUNDARY(buffer,upper_boundary);
+    for (i = buffer->out_offs; i < upper_boundary; i++) {
+        if (i == ind) break;
+        else pos += buffer->entry[CB_POINTER_CAST(i, buffer->entry)].size;
+    }
+    pos += offset;
+
+    return pos;
 }
 
 /**
@@ -69,6 +100,7 @@ const char * aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer,
         old_buf = buffer->entry[buffer->in_offs].buffptr;
         CB_POINTER_INC(buffer->out_offs, buffer->entry);
     }
+    buffer->size += add_entry->size - buffer->entry[buffer->in_offs].size;
     buffer->entry[buffer->in_offs] = *add_entry;
     CB_POINTER_INC(buffer->in_offs, buffer->entry);
     buffer->full = buffer->in_offs == buffer->out_offs;
